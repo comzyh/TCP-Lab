@@ -47,11 +47,12 @@ class EventLoop {
     };
 
     //! Add a rule whose callback will be called when `fd` is ready in the specified Direction.
-    void add_rule(const FileDescriptor &fd,
-                  const Direction direction,
-                  const CallbackT &callback,
-                  const InterestT &interest = [] { return true; },
-                  const CallbackT &cancel = [] {});
+    void add_rule(
+        const FileDescriptor &fd,
+        const Direction direction,
+        const CallbackT &callback,
+        const InterestT &interest = [] { return true; },
+        const CallbackT &cancel = [] {});
 
     //! Calls [poll(2)](\ref man2::poll) and then executes callback for each ready fd.
     Result wait_next_event(const int timeout_ms);

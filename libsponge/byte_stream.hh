@@ -19,11 +19,11 @@ class ByteStream {
 
     bool _error{};  //!< Flag indicating that the stream suffered an error.
 
-    size_t _capacity; 
+    size_t _capacity;
     std::string buf;
-    size_t rpos; //!< Total read size
+    size_t rpos;  //!< Total read size
     // size_t wpos; //!< Write position
-    size_t used; //!< Used buffer size
+    size_t used;  //!< Used buffer size
 
     bool _end_input;
 
