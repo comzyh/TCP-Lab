@@ -17,9 +17,6 @@ class TCPReceiver {
     //! Our data structure for re-assembling bytes.
     StreamReassembler _reassembler;
 
-    //! The maximum number of bytes we'll store.
-    size_t _capacity;
-
     //! Initial Sequence Number
     std::optional<WrappingInt32> isn; 
 
@@ -35,7 +32,7 @@ class TCPReceiver {
     //!
     //! \param capacity the maximum number of bytes that the receiver will
     //!                 store in its buffers at any give time.
-    TCPReceiver(const size_t capacity) : _reassembler(capacity), _capacity(capacity), isn(std::nullopt),fin_received(false) {}
+    TCPReceiver(const size_t capacity) : _reassembler(capacity), isn(std::nullopt),fin_received(false) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{
