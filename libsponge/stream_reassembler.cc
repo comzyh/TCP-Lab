@@ -25,8 +25,10 @@ StreamReassembler::StreamReassembler(const size_t capacity)
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
 void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
-    size_t start_index = max(rpos, index);                                             // starting index to be copied
-    size_t end_index = min(rpos + _output.remaining_capacity(), index + data.size());  // ending inedx to be copied, I think
+    // starting index to be copied
+    size_t start_index = max(rpos, index);
+    // ending inedx to be copied, I think
+    size_t end_index = min(rpos + _output.remaining_capacity(), index + data.size());
 
     for (size_t i = start_index; i < end_index; i++) {
         const size_t bi = i % _capacity;
