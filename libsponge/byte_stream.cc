@@ -45,7 +45,8 @@ string ByteStream::peek_output(const size_t len) const {
     const size_t size = min(len, used);
     string ret;
     ret.reserve(size);
-    size_t l1 = min(rpos % _capacity + used, _capacity) - rpos % _capacity;
+    size_t l1 = min(rpos % _capacity + used, _capacity) - rpos % _capacity;  // first part to the end of buffer
+    l1 = min(l1, size);                                                      // real first part
     ret.append(buf.begin() + rpos % _capacity, buf.begin() + rpos % _capacity + l1);
 
     if (ret.size() < size) {
