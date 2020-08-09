@@ -21,6 +21,18 @@ class TCPConnection {
     //! in case the remote TCPConnection doesn't know we've received its whole stream?
     bool _linger_after_streams_finish{true};
 
+    //! time since last segment received
+    uint64_t _time_since_last_segment_received;
+
+    //! get segment from sener and send them. return if segment is shooted
+    bool shot_segments(bool fill_window = true);
+
+    //! last segment ackno has been sent
+    std::optional<WrappingInt32> _last_ackno_sent;
+
+    //! has new ack_no to be sent
+    bool new_ackno_to_be_sent() const;
+
   public:
     //! \name "Input" interface for the writer
     //!@{
@@ -81,7 +93,8 @@ class TCPConnection {
     //!@}
 
     //! Construct a new connection from a configuration
-    explicit TCPConnection(const TCPConfig &cfg) : _cfg{cfg} {}
+    explicit TCPConnection(const TCPConfig &cfg)
+        : _cfg{cfg}, _time_since_last_segment_received(0), _last_ackno_sent(std::nullopt) {}
 
     //! \name construction and destruction
     //! moving is allowed; copying is disallowed; default construction not possible
