@@ -40,7 +40,11 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
     if (invalid_ack && _sender.next_seqno_absolute() == 0) {  // ignore invalid ACK before connection established
         return;
     }
+
+    size_t accepted_data_size_before = _receiver.unassembled_bytes() + _receiver.stream_out().bytes_written();
     bool segment_received = _receiver.segment_received(seg);
+    size_t accepted_data_size =  // The size of accepted data that unseen before.
+        _receiver.unassembled_bytes() + _receiver.stream_out().bytes_written() - accepted_data_size_before;
 
     // reset linger_after_streams_finish if remote EOF before inbound EOF
     if (_receiver.stream_out().eof() && !_sender.stream_in().eof()) {
@@ -50,9 +54,10 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
     bool shot = shot_segments();
 
     if (!shot &&
-        (seg.header().fin      // Deal with 2nd+ FIN. If peer resend FIN, connection should reply.
-         || invalid_ack        // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
-         || !segment_received  // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
+        (seg.header().fin           // Deal with 2nd+ FIN. If peer resend FIN, connection should reply.
+         || invalid_ack             // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
+         || !segment_received       // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
+         || accepted_data_size > 0  // should reply when get new byte in window
          ) &&
         // When SYN is sent, connection ONLY expect SYN_ACK. ANY other segment will not get reply.
         _sender.bytes_in_flight() != _sender.next_seqno_absolute()) {
