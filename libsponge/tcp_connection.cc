@@ -90,6 +90,9 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     if (_time_since_last_segment_received >= 10 * _cfg.rt_timeout) {
         _linger_after_streams_finish = false;
     }
+    if (_sender.next_seqno_absolute() == 0) {  // should not send segment(SYN) when stream is not started.
+        return;
+    }
     shot_segments();
 }
 
@@ -106,7 +109,7 @@ void TCPConnection::connect() { shot_segments(); }
 // this function will ensure new ack_no is sent, along with payload or just a empty segment.
 bool TCPConnection::shot_segments(bool fill_window) {
     bool shoot = false;
-    if (fill_window) {  // shoudd
+    if (fill_window) {
         _sender.fill_window();
     }
     while (active() && !_sender.segments_out().empty()) {
