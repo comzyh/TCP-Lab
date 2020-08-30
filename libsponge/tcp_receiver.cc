@@ -32,7 +32,8 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
     uint64_t old_window_size = window_size();
 
     if (!(abs_seq < old_abs_ackno + old_window_size && abs_seq + seg.length_in_sequence_space() > old_abs_ackno)) {
-        return false;  // Not overlap with the window
+        // Not overlap with the window. but if it's a ack only, it's accepted.
+        return seg.length_in_sequence_space() == 0;  
     }
     bool all_fill = abs_seq + seg.length_in_sequence_space() < old_abs_ackno + old_window_size;
 

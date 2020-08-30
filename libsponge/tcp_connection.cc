@@ -28,12 +28,19 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         return;
     }
 
-    _receiver.segment_received(seg);
-
+    // REPLAY_NON_OVERLAP
+    // if the TCPReceiver complains that the segment didn't overlap the window and was unacceptable
+    // the TCPConnection needs to make sure that a segment is sent back to the peer
+    bool invalid_ack = false;
     // deliver ack to sender
     if (seg.header().ack) {
-        _sender.ack_received(seg.header().ackno, seg.header().win);
+        invalid_ack = !_sender.ack_received(seg.header().ackno, seg.header().win);
     }
+
+    if (invalid_ack && _sender.next_seqno_absolute() == 0) {  // ignore invalid ACK before connection established
+        return;
+    }
+    bool segment_received = _receiver.segment_received(seg);
 
     // reset linger_after_streams_finish if remote EOF before inbound EOF
     if (_receiver.stream_out().eof() && !_sender.stream_in().eof()) {
@@ -41,8 +48,14 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
     }
 
     bool shot = shot_segments();
-    // Deal with 2nd+ FIN
-    if (!shot && seg.header().fin) {
+
+    if (!shot &&
+        (seg.header().fin      // Deal with 2nd+ FIN. If peer resend FIN, connection should reply.
+         || invalid_ack        // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
+         || !segment_received  // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
+         ) &&
+        // When SYN is sent, connection ONLY expect SYN_ACK. ANY other segment will not get reply.
+        _sender.bytes_in_flight() != _sender.next_seqno_absolute()) {
         _sender.send_empty_segment();
         shot_segments();
     }
@@ -82,14 +95,18 @@ void TCPConnection::end_input_stream() {
 
 void TCPConnection::connect() { shot_segments(); }
 
+// shot_segments take the segments from sender.segments_out and
+// mark them with correct ack_no and ACK flag.
+// If connection have new ack_no to be send but not sent yet,
+// this function will ensure new ack_no is sent, along with payload or just a empty segment.
 bool TCPConnection::shot_segments(bool fill_window) {
     bool shoot = false;
-    if (fill_window) {
+    if (fill_window) {  // shoudd
         _sender.fill_window();
     }
     while (active() && !_sender.segments_out().empty()) {
         auto seg = _sender.segments_out().front();
-        // Add ackno to sending segs
+        // Add ackno to sending segments
         if (_receiver.ackno().has_value()) {
             seg.header().ack = true;
             seg.header().ackno = _receiver.ackno().value();
@@ -98,9 +115,11 @@ bool TCPConnection::shot_segments(bool fill_window) {
         _segments_out.push(seg);
         _sender.segments_out().pop();
         shoot = true;
-        _sender.fill_window();
+        if (fill_window) {
+            _sender.fill_window();
+        }
     }
-    if (!shoot && new_ackno_to_be_sent()) {  // new ackno
+    if (!shoot && new_ackno_to_be_sent()) {  // Ensure the newest ack_no will be sent.
         auto x = _receiver.ackno().value();
         DUMMY_CODE(x);
         _sender.send_empty_segment();
