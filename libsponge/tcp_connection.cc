@@ -71,7 +71,7 @@ bool TCPConnection::active() const {
         return false;
     }
     if (_receiver.stream_out().eof() && _sender.stream_in().eof() && _sender.bytes_in_flight() == 0 &&
-        !new_ackno_to_be_sent() && !_linger_after_streams_finish) {
+        !has_new_ackno_to_be_sent()) {
         return false;
     }
     return true;
@@ -87,7 +87,10 @@ size_t TCPConnection::write(const string &data) {
 void TCPConnection::tick(const size_t ms_since_last_tick) {
     _sender.tick(ms_since_last_tick);
     _time_since_last_segment_received += ms_since_last_tick;
-    if (_time_since_last_segment_received >= 10 * _cfg.rt_timeout) {
+    if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {
+        reset();
+    }
+    if (_time_since_last_segment_received >= 10 * _cfg.rt_timeout && !active()) {
         _linger_after_streams_finish = false;
     }
     if (_sender.next_seqno_absolute() == 0) {  // should not send segment(SYN) when stream is not started.
@@ -104,7 +107,7 @@ void TCPConnection::end_input_stream() {
 void TCPConnection::connect() { shot_segments(); }
 
 // shot_segments take the segments from sender.segments_out and
-// mark them with correct ack_no and ACK flag.
+// mark them with correct ack_no, window_size and ACK flag.
 // If connection have new ack_no to be send but not sent yet,
 // this function will ensure new ack_no is sent, along with payload or just a empty segment.
 bool TCPConnection::shot_segments(bool fill_window) {
@@ -120,6 +123,7 @@ bool TCPConnection::shot_segments(bool fill_window) {
             seg.header().ackno = _receiver.ackno().value();
             _last_ackno_sent = _receiver.ackno();
         }
+        seg.header().win = _receiver.window_size();
         _segments_out.push(seg);
         _sender.segments_out().pop();
         shoot = true;
@@ -127,7 +131,7 @@ bool TCPConnection::shot_segments(bool fill_window) {
             _sender.fill_window();
         }
     }
-    if (!shoot && new_ackno_to_be_sent()) {  // Ensure the newest ack_no will be sent.
+    if (!shoot && has_new_ackno_to_be_sent()) {  // Ensure the newest ack_no will be sent.
         auto x = _receiver.ackno().value();
         DUMMY_CODE(x);
         _sender.send_empty_segment();
@@ -137,9 +141,18 @@ bool TCPConnection::shot_segments(bool fill_window) {
     return shoot;
 }
 
-bool TCPConnection::new_ackno_to_be_sent() const {  // receiver's ack_no is changed and not sent yet.
+bool TCPConnection::has_new_ackno_to_be_sent() const {  // receiver's ack_no is changed and not sent yet.
     return _receiver.ackno().has_value() &&
            (!_last_ackno_sent.has_value() || (_last_ackno_sent.value() != _receiver.ackno().value()));
+}
+
+void TCPConnection::reset() {
+    TCPSegment segment;
+    segment.header().seqno = _sender.next_seqno();
+    segment.header().rst = true;
+    _segments_out.push(segment);
+    _sender.stream_in().set_error();
+    _receiver.stream_out().set_error();
 }
 
 TCPConnection::~TCPConnection() {
@@ -148,10 +161,7 @@ TCPConnection::~TCPConnection() {
             cerr << "Warning: Unclean shutdown of TCPConnection\n";
 
             // Your code here: need to send a RST segment to the peer
-            TCPSegment segment;
-            segment.header().seqno = _sender.next_seqno();
-            segment.header().rst = true;
-            _segments_out.push(segment);
+            reset();
         }
     } catch (const exception &e) {
         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;

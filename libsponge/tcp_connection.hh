@@ -31,7 +31,10 @@ class TCPConnection {
     std::optional<WrappingInt32> _last_ackno_sent;
 
     //! has new ack_no to be sent
-    bool new_ackno_to_be_sent() const;
+    bool has_new_ackno_to_be_sent() const;
+
+    //! reset the connection
+    void reset();
 
   public:
     //! \name "Input" interface for the writer
