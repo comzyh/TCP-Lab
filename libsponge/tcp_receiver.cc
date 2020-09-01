@@ -42,12 +42,12 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
     bool all_fill = abs_seq + seg.length_in_sequence_space() < old_abs_ackno + old_window_size;
 
     if (all_fill && seg.header().fin) {  // only when fin also fall in the window
-        fin_received = true;
+        fin_abs_seq = abs_seq + seg.length_in_sequence_space();
     }
 
     uint64_t stream_indices = abs_seq > 0 ? abs_seq - 1 : 0;
     std::string payload(seg.payload().copy());
-    _reassembler.push_substring(payload, stream_indices, fin_received);
+    _reassembler.push_substring(payload, stream_indices, stream_indices + seg.payload().size() + 2 == fin_abs_seq);
 
     return true;
 }
@@ -55,7 +55,11 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
 uint64_t TCPReceiver::abs_ackno() const {
     // I write the StreamReassembler,
     // I know that the reassembler will write to outoput stream once there are something can be sumbmit.
-    return _reassembler.stream_out().bytes_written() + 1 + (fin_received ? 1 : 0);
+    uint64_t abs_ackno_without_fin = 1 + _reassembler.stream_out().bytes_written(); // 1 for SYN
+    if (abs_ackno_without_fin + 1 == fin_abs_seq) {
+        return abs_ackno_without_fin + 1;
+    }
+    return abs_ackno_without_fin;
 }
 
 optional<WrappingInt32> TCPReceiver::ackno() const {

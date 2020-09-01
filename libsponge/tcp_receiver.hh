@@ -21,7 +21,7 @@ class TCPReceiver {
     std::optional<WrappingInt32> isn;
 
     //! FIN is received and accepted(inside the receive window)
-    bool fin_received;
+    uint64_t fin_abs_seq;
 
     //! ackno in Absolute Sequence Numbers form
     uint64_t abs_ackno() const;
@@ -31,7 +31,7 @@ class TCPReceiver {
     //!
     //! \param capacity the maximum number of bytes that the receiver will
     //!                 store in its buffers at any give time.
-    TCPReceiver(const size_t capacity) : _reassembler(capacity), isn(std::nullopt), fin_received(false) {}
+    TCPReceiver(const size_t capacity) : _reassembler(capacity), isn(std::nullopt), fin_abs_seq(0) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{

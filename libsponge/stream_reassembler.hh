@@ -20,7 +20,8 @@ class StreamReassembler {
     std::vector<uint8_t> bit_map;
     size_t rpos;
     size_t _unassembled_bytes;
-    bool eof_received;
+    size_t eof_index;  // the index of EOF byte, defined as the next byte of last stream.
+                       // if eof_index == 0 means no EOF is received.
 
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.

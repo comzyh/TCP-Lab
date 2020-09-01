@@ -58,6 +58,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
          || invalid_ack             // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
          || !segment_received       // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
          || accepted_data_size > 0  // should reply when get new byte in window
+         || seg.length_in_sequence_space()
          ) &&
         // When SYN is sent, connection ONLY expect SYN_ACK. ANY other segment will not get reply.
         _sender.bytes_in_flight() != _sender.next_seqno_absolute()) {
@@ -72,6 +73,9 @@ bool TCPConnection::active() const {
     }
     if (_receiver.stream_out().eof() && _sender.stream_in().eof() && _sender.bytes_in_flight() == 0 &&
         !has_new_ackno_to_be_sent()) {
+        if (_linger_after_streams_finish && _time_since_last_segment_received < 10 * _cfg.rt_timeout) {
+            return true;
+        }
         return false;
     }
     return true;
