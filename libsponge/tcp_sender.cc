@@ -73,7 +73,6 @@ void TCPSender::fill_window() {
     }
     _flying_segments.push(segment);
     _segments_out.push(segment);  // send the segment
-    _receive_window_size -= segment.length_in_sequence_space();
 
     // start the timer if not started
     if (!_timer_started) {

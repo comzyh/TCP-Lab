@@ -29,9 +29,6 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
                               .bytes_written();  // bytes_written is a little bit small, but good enough for checkpoint
     uint64_t abs_seq = unwrap(seg.header().seqno, isn.value(), checkpoint);
 
-    // if (abs_seq == 0 && !seg.header().syn) {
-    //     return false;  // Only SYN can have abs_seq == 0
-    // }
 
     uint64_t old_window_size = window_size();
 
@@ -39,6 +36,7 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
     if (fin_abs_seq && abs_seq >= fin_abs_seq && seg.length_in_sequence_space() == 0) {
         return true;
     }
+
     if (!(abs_seq < old_abs_ackno + old_window_size && abs_seq + seg.length_in_sequence_space() > old_abs_ackno)) {
         // Not overlap with the window. but if it's a ack only, it's accepted.
         return seg.length_in_sequence_space() == 0 && abs_seq == old_abs_ackno;

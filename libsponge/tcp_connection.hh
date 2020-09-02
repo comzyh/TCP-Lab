@@ -25,7 +25,9 @@ class TCPConnection {
     uint64_t _time_since_last_segment_received;
 
     //! get segment from sener and send them. return if segment is shooted
-    bool shot_segments(bool fill_window = true);
+    void shot_segments();
+
+    bool poll_sender();
 
     //! last segment ackno has been sent
     std::optional<WrappingInt32> _last_ackno_sent;

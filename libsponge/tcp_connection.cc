@@ -41,23 +41,19 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         return;
     }
 
-    size_t accepted_data_size_before = _receiver.unassembled_bytes() + _receiver.stream_out().bytes_written();
     bool segment_received = _receiver.segment_received(seg);
-    size_t accepted_data_size =  // The size of accepted data that unseen before.
-        _receiver.unassembled_bytes() + _receiver.stream_out().bytes_written() - accepted_data_size_before;
 
     // reset linger_after_streams_finish if remote EOF before inbound EOF
     if (_receiver.stream_out().eof() && !_sender.stream_in().eof()) {
         _linger_after_streams_finish = false;
     }
 
-    bool shot = shot_segments();
+    bool will_shot = poll_sender();
 
-    if (!shot &&
+    if (!will_shot &&
         (seg.header().fin                   // Deal with 2nd+ FIN. If peer resend FIN, connection should reply.
          || invalid_ack                     // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
          || !segment_received               // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
-         || accepted_data_size > 0          // should reply when get new byte in window
          || seg.length_in_sequence_space()  // should reply when got not just ACK
          ) &&
         // When SYN is sent, connection ONLY expect SYN_ACK. ANY other segment will not get reply.
@@ -83,7 +79,7 @@ bool TCPConnection::active() const {
 
 size_t TCPConnection::write(const string &data) {
     size_t writen = _sender.stream_in().write(data);
-    shot_segments();
+    poll_sender();
     return writen;
 }
 
@@ -102,26 +98,44 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     if (_sender.next_seqno_absolute() == 0) {  // should not send segment(SYN) when stream is not started.
         return;
     }
-    shot_segments();
+    poll_sender();
 }
 
 void TCPConnection::end_input_stream() {
     _sender.stream_in().end_input();
-    shot_segments();
+    poll_sender();
 }
 
-void TCPConnection::connect() { shot_segments(); }
+void TCPConnection::connect() { poll_sender(); }
 
+// poll_sender will try to fill the sending window and returns if new segment is generated.
+// this function will ensure new ack_no is sent, along with payload or just a empty segment.
+bool TCPConnection::poll_sender() {
+    size_t segment_num = _sender.segments_out().size();
+    for (;;) {
+        _sender.fill_window();
+        if (_sender.segments_out().size() == segment_num) { // no new segment generated
+            break;
+        }
+        segment_num = _sender.segments_out().size();
+    }
+    if (_sender.segments_out().size() == 0 && has_new_ackno_to_be_sent()) {
+        _sender.send_empty_segment();
+    }
+    if (_sender.segments_out().size()) {
+        shot_segments();
+        return true;
+    }
+    return false;
+}
 // shot_segments take the segments from sender.segments_out and
 // mark them with correct ack_no, window_size and ACK flag.
 // If connection have new ack_no to be send but not sent yet,
-// this function will ensure new ack_no is sent, along with payload or just a empty segment.
-bool TCPConnection::shot_segments(bool fill_window) {
-    bool shoot = false;
-    if (fill_window) {
-        _sender.fill_window();
+void TCPConnection::shot_segments() {
+    if (!active()) {
+        return;
     }
-    while (active() && !_sender.segments_out().empty()) {
+    while (!_sender.segments_out().empty()) {
         auto seg = _sender.segments_out().front();
         // Add ackno to sending segments
         if (_receiver.ackno().has_value()) {
@@ -132,17 +146,7 @@ bool TCPConnection::shot_segments(bool fill_window) {
         seg.header().win = _receiver.window_size();
         _segments_out.push(seg);
         _sender.segments_out().pop();
-        shoot = true;
-        if (fill_window) {
-            _sender.fill_window();
-        }
     }
-    if (!shoot && has_new_ackno_to_be_sent()) {  // Ensure the ack_no update will be sent.
-        _sender.send_empty_segment();
-        shot_segments();
-        shoot = true;
-    }
-    return shoot;
 }
 
 bool TCPConnection::has_new_ackno_to_be_sent() const {  // receiver's ack_no is changed and not sent yet.
@@ -163,7 +167,6 @@ TCPConnection::~TCPConnection() {
     try {
         if (active()) {
             cerr << "Warning: Unclean shutdown of TCPConnection\n";
-
             // Your code here: need to send a RST segment to the peer
             reset();
         }
