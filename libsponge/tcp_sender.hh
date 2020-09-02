@@ -38,8 +38,11 @@ class TCPSender {
     //! flying segment total_size
     uint64_t _total_flying_size;
 
-    //! implied size remote receive window
+    //! size of remote receive window
     size_t _receive_window_size;
+
+    //! the right edge of remote receive window. edge is not included in window.
+    size_t _receive_window_edge;
 
     //! retransmission timer countdown value in ms
     int64_t _timer_countdown;

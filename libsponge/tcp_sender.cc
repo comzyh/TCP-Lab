@@ -22,7 +22,8 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , _initial_retransmission_timeout{retx_timeout}
     , _stream(capacity)
     , _total_flying_size(0)
-    , _receive_window_size(0)  // initial remote receive window size is 0.
+    , _receive_window_size(1)  // initial remote receive window size is 1 for SYN
+    , _receive_window_edge(1)  // edge is 1 byte out of window.
     , _timer_countdown(0)
     , _timer_started(false)
     , _RTO(_initial_retransmission_timeout)
@@ -51,14 +52,16 @@ void TCPSender::fill_window() {
         _next_seqno++;
     }
 
-    send_size = min(send_size, _receive_window_size);  // adjust remote receive window
+    // when window == 0, assume the remote receive window is 1 for zero-window probing.
+    size_t zp_window_edge = _receive_window_edge + (_receive_window_size == 0 && _receive_window_edge == _next_seqno);
+    send_size = min(send_size, zp_window_edge - _next_seqno);  // adjust remote receive window.
 
     segment.payload() = Buffer(_stream.read(send_size));
     send_size = min(send_size, segment.payload().size());
     _next_seqno += send_size;
 
     // No data needs to be send and receiver have window to receive FIN
-    if (_stream.eof() && _fin_abs_seq == 0 && segment.length_in_sequence_space() < _receive_window_size) {
+    if (_stream.eof() && _fin_abs_seq == 0 && _next_seqno < zp_window_edge) {
         segment.header().fin = true;
         _fin_abs_seq = _next_seqno;
         _next_seqno++;
@@ -92,6 +95,7 @@ bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 
     // update the recv window size
     _receive_window_size = window_size;
+    _receive_window_edge = abs_ackno + window_size;
 
     if (abs_ackno <= _latest_abs_ackno) {  // ack already acked segment
         return true;

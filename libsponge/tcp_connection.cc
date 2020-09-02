@@ -54,11 +54,11 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
     bool shot = shot_segments();
 
     if (!shot &&
-        (seg.header().fin           // Deal with 2nd+ FIN. If peer resend FIN, connection should reply.
-         || invalid_ack             // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
-         || !segment_received       // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
-         || accepted_data_size > 0  // should reply when get new byte in window
-         || seg.length_in_sequence_space()
+        (seg.header().fin                   // Deal with 2nd+ FIN. If peer resend FIN, connection should reply.
+         || invalid_ack                     // should reply to invalid ack (described in REPLAY_NON_OVERLAP)
+         || !segment_received               // should reply to non-overlab segment (described in REPLAY_NON_OVERLAP)
+         || accepted_data_size > 0          // should reply when get new byte in window
+         || seg.length_in_sequence_space()  // should reply when got not just ACK
          ) &&
         // When SYN is sent, connection ONLY expect SYN_ACK. ANY other segment will not get reply.
         _sender.bytes_in_flight() != _sender.next_seqno_absolute()) {
@@ -94,9 +94,11 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     if (_sender.consecutive_retransmissions() > TCPConfig::MAX_RETX_ATTEMPTS) {
         reset();
     }
+
     if (_time_since_last_segment_received >= 10 * _cfg.rt_timeout && !active()) {
         _linger_after_streams_finish = false;
     }
+
     if (_sender.next_seqno_absolute() == 0) {  // should not send segment(SYN) when stream is not started.
         return;
     }
@@ -135,9 +137,7 @@ bool TCPConnection::shot_segments(bool fill_window) {
             _sender.fill_window();
         }
     }
-    if (!shoot && has_new_ackno_to_be_sent()) {  // Ensure the newest ack_no will be sent.
-        auto x = _receiver.ackno().value();
-        DUMMY_CODE(x);
+    if (!shoot && has_new_ackno_to_be_sent()) {  // Ensure the ack_no update will be sent.
         _sender.send_empty_segment();
         shot_segments();
         shoot = true;

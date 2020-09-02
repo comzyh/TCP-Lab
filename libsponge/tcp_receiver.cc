@@ -59,7 +59,7 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
 uint64_t TCPReceiver::abs_ackno() const {
     // I write the StreamReassembler,
     // I know that the reassembler will write to outoput stream once there are something can be sumbmit.
-    uint64_t abs_ackno_without_fin = 1 + _reassembler.stream_out().bytes_written(); // 1 for SYN
+    uint64_t abs_ackno_without_fin = 1 + _reassembler.stream_out().bytes_written();  // 1 for SYN
     if (abs_ackno_without_fin + 1 == fin_abs_seq) {
         return abs_ackno_without_fin + 1;
     }
